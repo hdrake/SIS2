@@ -361,6 +361,10 @@ type ice_ocean_flux_type
     flux_lh_ocn_top, & !< The upward flux of latent heat at the ocean surface [Q R Z T-1 ~> W m-2].
     lprec_ocn_top, &   !< The downward flux of liquid precipitation at the ocean surface [R Z T-1 ~> kg m-2 s-1].
     fprec_ocn_top, &   !< The downward flux of frozen precipitation at the ocean surface [R Z T-1 ~> kg m-2 s-1].
+    seaice_melt_ocn, & !< The net mass flux to the ocean from the melting (positive) or formation
+                       !! (negative) of sea ice and snow [R Z T-1 ~> kg m-2 s-1].  This is allocated
+                       !! only when KEEP_SEAICE_MELT_SEPARATE is true; otherwise the same quantity is
+                       !! folded into lprec_ocn_top, where the ocean cannot tell it apart from rain.
     flux_u_ocn, &      !< The flux of x-momentum into the ocean at locations given by
                        !! flux_uv_stagger [R Z L T-2 ~> Pa].
                        !! Note that regardless of the staggering, flux_u_ocn is allocated as though on an A-grid.
@@ -912,7 +916,8 @@ end subroutine alloc_ice_rad
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
 !> alloc_ice_ocean_flux allocates and zeros out the arrays in an ice_ocean_flux_type.
-subroutine alloc_ice_ocean_flux(IOF, HI, do_stress_mag, do_iceberg_fields, do_transmute, do_brine_plume)
+subroutine alloc_ice_ocean_flux(IOF, HI, do_stress_mag, do_iceberg_fields, do_transmute, do_brine_plume, &
+                                do_seaice_melt)
   type(ice_ocean_flux_type), pointer    :: IOF !< A structure containing fluxes from the ice to
                                                !! the ocean that are calculated by the ice model.
   type(hor_index_type),      intent(in) :: HI  !< The horizontal index type describing the domain
@@ -925,11 +930,15 @@ subroutine alloc_ice_ocean_flux(IOF, HI, do_stress_mag, do_iceberg_fields, do_tr
                                                !! of open boundary condition
   logical,         optional, intent(in) :: do_brine_plume !< If true, allocate fields related
                                                !! brine plume parameterization
+  logical,         optional, intent(in) :: do_seaice_melt !< If true, allocate the field that carries
+                                               !! the sea-ice and snow melt/formation mass flux to the
+                                               !! ocean separately from the liquid precipitation.
   integer :: CatIce
-  logical :: alloc_bergs, alloc_stress_mag
+  logical :: alloc_bergs, alloc_stress_mag, alloc_seaice_melt
 
   alloc_bergs = .false. ; if (present(do_iceberg_fields)) alloc_bergs = do_iceberg_fields
   alloc_stress_mag = .false. ; if (present(do_stress_mag)) alloc_stress_mag = do_stress_mag
+  alloc_seaice_melt = .false. ; if (present(do_seaice_melt)) alloc_seaice_melt = do_seaice_melt
 
   if (.not.associated(IOF)) allocate(IOF)
 
@@ -948,6 +957,9 @@ subroutine alloc_ice_ocean_flux(IOF, HI, do_stress_mag, do_iceberg_fields, do_tr
   allocate(IOF%flux_sw_ocn(SZI_(HI), SZJ_(HI), NBANDS), source=0.0)
   allocate(IOF%lprec_ocn_top(SZI_(HI), SZJ_(HI)), source=0.0)
   allocate(IOF%fprec_ocn_top(SZI_(HI), SZJ_(HI)), source=0.0)
+  if (alloc_seaice_melt) then
+    allocate(IOF%seaice_melt_ocn(SZI_(HI), SZJ_(HI)), source=0.0)
+  endif
   allocate(IOF%flux_u_ocn(SZI_(HI), SZJ_(HI)), source=0.0)
   allocate(IOF%flux_v_ocn(SZI_(HI), SZJ_(HI)), source=0.0)
   if (alloc_stress_mag) then
@@ -2242,6 +2254,7 @@ subroutine dealloc_ice_ocean_flux(IOF)
   deallocate(IOF%lprec_ocn_top, IOF%fprec_ocn_top, IOF%flux_salt)
   deallocate(IOF%flux_u_ocn, IOF%flux_v_ocn, IOF%pres_ocn_top, IOF%mass_ice_sn_p)
   if (allocated(IOF%stress_mag)) deallocate(IOF%stress_mag)
+  if (allocated(IOF%seaice_melt_ocn)) deallocate(IOF%seaice_melt_ocn)
   if (allocated(IOF%transmutation_salt_flux)) deallocate(IOF%transmutation_salt_flux)
   if (allocated(IOF%salt_left_behind)) deallocate(IOF%salt_left_behind)
 

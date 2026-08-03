@@ -677,6 +677,8 @@ subroutine set_ocean_top_fluxes(Ice, IST, IOF, FIA, OSS, G, US, IG, sCS)
     Ice%flux_lh(i2,j2) = US%QRZ_T_to_W_m2*IOF%flux_lh_ocn_top(i,j)
     Ice%fprec(i2,j2) = US%RZ_T_to_kg_m2s*IOF%fprec_ocn_top(i,j)
     Ice%lprec(i2,j2) = US%RZ_T_to_kg_m2s*IOF%lprec_ocn_top(i,j)
+    if (associated(Ice%seaice_melt)) &
+      Ice%seaice_melt(i2,j2) = US%RZ_T_to_kg_m2s*IOF%seaice_melt_ocn(i,j)
     Ice%runoff(i2,j2)  = US%RZ_T_to_kg_m2s*FIA%runoff(i,j)
     Ice%calving(i2,j2) = US%RZ_T_to_kg_m2s*FIA%calving(i,j)
     Ice%runoff_hflx(i2,j2)  = US%QRZ_T_to_W_m2*FIA%runoff_hflx(i,j)
@@ -1786,6 +1788,7 @@ subroutine ice_model_init(Ice, Time_Init, Time, Time_step_fast, Time_step_slow, 
   logical :: atmos_winds, slp2ocean
   logical :: do_icebergs, pass_iceberg_area_to_ocean
   logical :: pass_stress_mag
+  logical :: keep_seaice_melt_separate
   logical :: do_ridging
   logical :: specified_ice    ! If true, the ice is specified and there is no dynamics.
   logical :: Cgrid_dyn
@@ -2006,6 +2009,10 @@ subroutine ice_model_init(Ice, Time_Init, Time, Time_step_fast, Time_step_slow, 
   call get_param(param_file, mdl, "PASS_STRESS_MAG_TO_OCEAN", pass_stress_mag, &
                  "If true, provide the time and area weighted mean magnitude "//&
                  "of the stresses on the ocean to the ocean.", default=.false.)
+  ! Read here (and again in SIS_slow_thermo_init, which owns the parameter) so that the
+  ! ice-ocean flux field is allocated exactly when the slow thermodynamics will fill it.
+  call get_param(param_file, mdl, "KEEP_SEAICE_MELT_SEPARATE", keep_seaice_melt_separate, &
+                 default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "DO_ICEBERGS", do_icebergs, &
                  "If true, call the iceberg module.", default=.false.)
   if (do_icebergs) then
@@ -2123,6 +2130,7 @@ subroutine ice_model_init(Ice, Time_Init, Time, Time_step_fast, Time_step_slow, 
     Ice%sCS%do_icebergs = do_icebergs
     Ice%sCS%pass_iceberg_area_to_ocean = pass_iceberg_area_to_ocean
     Ice%sCS%pass_stress_mag = pass_stress_mag
+    Ice%sCS%keep_seaice_melt_separate = keep_seaice_melt_separate
     Ice%sCS%slab_ice = slab_ice
     Ice%sCS%specified_ice = specified_ice
     Ice%sCS%Cgrid_dyn = Cgrid_dyn
@@ -2203,7 +2211,8 @@ subroutine ice_model_init(Ice, Time_Init, Time, Time_step_fast, Time_step_slow, 
 
     call alloc_ice_ocean_flux(Ice%sCS%IOF, sHI, do_stress_mag=Ice%sCS%pass_stress_mag, &
                               do_iceberg_fields=Ice%sCS%do_icebergs, do_transmute=transmute_ice, &
-                              do_brine_plume=Ice%sCS%do_brine_plume)
+                              do_brine_plume=Ice%sCS%do_brine_plume, &
+                              do_seaice_melt=keep_seaice_melt_separate)
     Ice%sCS%IOF%slp2ocean = slp2ocean
     Ice%sCS%IOF%flux_uv_stagger = Ice%flux_uv_stagger
     call alloc_fast_ice_avg(Ice%sCS%FIA, sHI, sIG, interp_fluxes, gas_fluxes, allow_carbon_flux_exchange, ice_sheet_enabled=do_IS)

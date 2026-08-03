@@ -100,6 +100,10 @@ type ice_data_type !  ice_public_type
     flux_lh => NULL(), &  !< The latent heat flux out of the ocean [W m-2].
     lprec => NULL(), &    !< The liquid precipitation flux into the ocean [kg m-2].
     fprec => NULL(), &    !< The frozen precipitation flux into the ocean [kg m-2].
+    seaice_melt => NULL(), & !< The net mass flux into the ocean from the melting (positive) or
+                          !! formation (negative) of sea ice and snow [kg m-2 s-1].  Associated only
+                          !! when KEEP_SEAICE_MELT_SEPARATE is true; otherwise this flux is part of
+                          !! lprec and the ocean cannot distinguish it from rainfall.
     p_surf => NULL(), &   !< The pressure at the ocean surface [Pa].  This may
                           !! or may not include atmospheric pressure.
     runoff => NULL(), &   !< Liquid runoff into the ocean [kg m-2].
@@ -234,6 +238,10 @@ subroutine ice_type_slow_reg_restarts(domain, CatIce, param_file, Ice, &
     call safe_alloc_ptr(Ice%stress_mag, isc, iec, jsc, jec)
   endif
 
+  if (Ice%sCS%keep_seaice_melt_separate) then
+    call safe_alloc_ptr(Ice%seaice_melt, isc, iec, jsc, jec)
+  endif
+
   if (Ice%sCS%pass_iceberg_area_to_ocean) then
     call safe_alloc_ptr(Ice%ustar_berg, isc, iec, jsc, jec)
     call safe_alloc_ptr(Ice%area_berg, isc, iec, jsc, jec)
@@ -364,6 +372,7 @@ subroutine dealloc_Ice_arrays(Ice)
   if (associated(Ice%flux_lh)) deallocate(Ice%flux_lh)
   if (associated(Ice%lprec)) deallocate(Ice%lprec)
   if (associated(Ice%fprec)) deallocate(Ice%fprec)
+  if (associated(Ice%seaice_melt)) deallocate(Ice%seaice_melt)
   if (associated(Ice%p_surf)) deallocate(Ice%p_surf)
   if (associated(Ice%runoff)) deallocate(Ice%runoff)
   if (associated(Ice%runoff_carbon)) deallocate(Ice%runoff_carbon)
@@ -447,6 +456,7 @@ subroutine Ice_public_type_chksum(mesg, Ice, check_fast, check_slow, check_rough
     call chksum(Ice%flux_lh, trim(mesg)//" Ice%flux_lh")
     call chksum(Ice%lprec, trim(mesg)//" Ice%lprec")
     call chksum(Ice%fprec, trim(mesg)//" Ice%fprec")
+    if (associated(Ice%seaice_melt)) call chksum(Ice%seaice_melt, trim(mesg)//" Ice%seaice_melt")
     call chksum(Ice%p_surf, trim(mesg)//" Ice%p_surf")
     call chksum(Ice%calving, trim(mesg)//" Ice%calving")
     if (associated(Ice%adot)) call chksum(Ice%adot, trim(mesg)//" Ice%adot")

@@ -101,6 +101,13 @@ type slow_thermo_CS ; private
   logical :: do_ice_limit   !< Limit the sea ice thickness to max_ice_limit.
   real    :: max_ice_limit  !< The maximum sea ice thickness [Z ~> m], when do_ice_limit is true.
 
+  logical :: keep_seaice_melt_separate !< If true, pass the net melt (positive) or formation
+                            !! (negative) of sea ice and snow to the ocean in its own field rather
+                            !! than folding it into the liquid precipitation.  The ocean can then
+                            !! diagnose the ice-ocean mass exchange (as fsitherm) and offset it
+                            !! exactly, instead of reconstructing it from the brine salt flux.
+                            !! The default is false, which reproduces the historical behaviour.
+
   logical :: nudge_sea_ice  !< If true, nudge sea ice concentrations towards observations.
   real    :: nudge_sea_ice_rate !< The rate of cooling of ice-free water that should be ice
                             !! covered in order to constrained the ice concentration to track
@@ -1533,11 +1540,21 @@ subroutine SIS2_thermodynamics(IST, dt_slow, CS, OSS, FIA, IOF, G, US, IG)
   call SIS_diag_send_complete()
   call disable_SIS_averaging(CS%diag)
 
-  ! Combine the liquid precipitation with the net melt of ice and snow for
-  ! passing to the ocean. These may later be kept separate.
-  do j=jsc,jec ; do i=isc,iec
-    IOF%lprec_ocn_top(i,j) = IOF%lprec_ocn_top(i,j) + net_melt(i,j)
-  enddo ; enddo
+  ! Pass the net melt of ice and snow to the ocean.  Historically this was folded into the liquid
+  ! precipitation, which left the ocean unable to tell the ice-ocean mass exchange apart from rain --
+  ! so MOM6 had to reconstruct it from the brine salt flux, and the `fsitherm` diagnostic it already
+  ! registers for exactly this quantity was identically zero.  With KEEP_SEAICE_MELT_SEPARATE the
+  ! flux is carried in its own field instead.  The sum handed to the ocean is unchanged either way;
+  ! only its attribution differs.
+  if (allocated(IOF%seaice_melt_ocn)) then
+    do j=jsc,jec ; do i=isc,iec
+      IOF%seaice_melt_ocn(i,j) = net_melt(i,j)
+    enddo ; enddo
+  else
+    do j=jsc,jec ; do i=isc,iec
+      IOF%lprec_ocn_top(i,j) = IOF%lprec_ocn_top(i,j) + net_melt(i,j)
+    enddo ; enddo
+  endif
 
   ! Make sure TrLay is no longer allocated
   if(allocated(TrLay)) deallocate(TrLay)
@@ -1610,6 +1627,16 @@ subroutine SIS_slow_thermo_init(Time, G, US, IG, param_file, diag, CS, tracer_fl
     call SIS_error(FATAL, "It is inconsistent to have both ICE_BULK_SALINITY "//&
                    "and ICE_RELATIVE_SALINITY set to positive values.")
   if (CS%ice_bulk_salin < 0.0) CS%ice_bulk_salin = 0.0
+
+  call get_param(param_file, mdl, "KEEP_SEAICE_MELT_SEPARATE", CS%keep_seaice_melt_separate, &
+                 "If true, pass the net melt (positive) or formation (negative) of sea ice and "//&
+                 "snow to the ocean as its own field instead of folding it into the liquid "//&
+                 "precipitation.  The ocean then diagnoses this exchange as fsitherm and can "//&
+                 "offset it exactly in its net-fresh-water adjustment, rather than reconstructing "//&
+                 "it from the brine salt flux divided by an assumed ice salinity -- a "//&
+                 "reconstruction that is wrong when the ice salinity varies or the ice is fresh, "//&
+                 "and that is blind to snow entirely.  Setting this true requires "//&
+                 "USE_SEAICE_MELT_IN_NET_FW in the ocean, and vice versa.", default=.false.)
 
   call get_param(param_file, mdl, "SIS2_FILLING_FRAZIL", CS%filling_frazil, &
                "If true, apply frazil to fill as many categories as "//&

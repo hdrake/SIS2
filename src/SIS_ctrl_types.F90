@@ -100,6 +100,9 @@ type SIS_slow_CS
                             !! no need for ice dynamics.
   logical :: pass_stress_mag !< If true, calculate the time-mean magnitude of the
                             !! ice-ocean stresses and pass it to the ocean.
+  logical :: keep_seaice_melt_separate !< If true, pass the net melt or formation of sea ice and
+                            !! snow to the ocean in its own field rather than folding it into the
+                            !! liquid precipitation.  See KEEP_SEAICE_MELT_SEPARATE.
   logical :: do_icebergs    !< If true, use the Lagrangian iceberg code, which
                             !! modifies the calving field among other things.
   logical :: pass_iceberg_area_to_ocean !< If true, iceberg area is passed through coupler
